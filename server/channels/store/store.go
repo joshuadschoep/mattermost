@@ -281,6 +281,7 @@ type ChannelStore interface {
 	GetMembersByChannelIds(channelIds []string, userID string) (model.ChannelMembers, error)
 	GetMembersInfoByChannelIds(channelIDs []string) (map[string][]*model.User, error)
 	GetChannelUnread(channelID, userID string) (*model.ChannelUnread, error)
+	GetChannelsByTeamWithUnreadAndMentions(rctx request.CTX, teamID string, userID string) ([]string, []string, map[string]int64, error)
 	GetChannelsWithUnreadsAndWithMentions(rctx request.CTX, channelIDs []string, userID string, userNotifyProps model.StringMap) ([]string, []string, map[string]int64, error)
 	ClearCaches()
 	ClearMembersForUserCache()

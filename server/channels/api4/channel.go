@@ -36,6 +36,7 @@ func (api *API) InitChannel() {
 	api.BaseRoutes.ChannelsForTeam.Handle("/search", api.APISessionRequiredDisableWhenBusy(searchChannelsForTeam)).Methods(http.MethodPost)
 	api.BaseRoutes.ChannelsForTeam.Handle("/autocomplete", api.APISessionRequired(autocompleteChannelsForTeam)).Methods(http.MethodGet)
 	api.BaseRoutes.ChannelsForTeam.Handle("/search_autocomplete", api.APISessionRequired(autocompleteChannelsForTeamForSearch)).Methods(http.MethodGet)
+	api.BaseRoutes.ChannelsForTeam.Handle("/read", api.APISessionRequired(updateAllReadStateByTeamForUser)).Methods(http.MethodPut)
 	api.BaseRoutes.User.Handle("/teams/{team_id:[A-Za-z0-9]+}/channels", api.APISessionRequired(getChannelsForTeamForUser)).Methods(http.MethodGet)
 	api.BaseRoutes.User.Handle("/channels", api.APISessionRequired(getChannelsForUser)).Methods(http.MethodGet)
 
@@ -1684,6 +1685,34 @@ func readMultipleChannels(c *Context, w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		c.Logger.Warn("Error while writing response", mlog.Err(err))
 	}
+}
+
+func updateAllReadStateByTeamForUser(c *Context, w http.ResponseWriter, r *http.Request) {
+	if !c.App.Config().FeatureFlags.EnableShiftEscapeToMarkAllRead {
+		c.Err = model.NewAppError("updateAllReadStateByTeamForUser", "api.feature_disabled", nil, "", http.StatusNotImplemented)
+		return
+	}
+
+	c.RequireUserId().RequireTeamId()
+	if c.Err != nil {
+		return
+	}
+
+	auditRec := c.MakeAuditRecord(model.AuditEventMarkAllRead, model.AuditStatusFail)
+	defer c.LogAuditRec(auditRec)
+	model.AddEventParameterToAuditRec(auditRec, "user_id", c.Params.UserId)
+	model.AddEventParameterToAuditRec(auditRec, "team_id", c.Params.TeamId)
+
+	if !c.App.SessionHasPermissionToUser(*c.AppContext.Session(), c.Params.UserId) {
+		c.SetPermissionError(model.PermissionEditOtherUsers)
+		return
+	}
+	if !c.App.SessionHasPermissionToTeam(*c.AppContext.Session(), c.Params.TeamId, model.PermissionViewTeam) {
+		c.SetPermissionError(model.PermissionViewTeam)
+		return
+	}
+
+	
 }
 
 func updateChannelMemberRoles(c *Context, w http.ResponseWriter, r *http.Request) {

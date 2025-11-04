@@ -2057,6 +2057,34 @@ func (s SqlChannelStore) GetChannelMembersTimezones(channelId string) ([]model.S
 	return dbMembersTimezone, nil
 }
 
+func (s SqlChannelStore) GetChannelsByTeamWithUnreadAndMentions(rctx request.CTX, teamID string, userID string) ([]string, []string, map[string]int64, error) {
+	query := s.getQueryBuilder().Select(
+		"Channels.Id",
+		"Channels.Type",
+		"Channels.TotalMsgCount",
+		"Channels.LastPostAt",
+		"ChannelMembers.MsgCount",
+		"ChannelMembers.MentionCount",
+		"ChannelMembers.NotifyProps",
+		"ChannelMembers.LastViewedAt",
+	).From("ChannelMembers").
+		InnerJoin("Channels ON ChannelMembers.ChannelId = Channels.Id").Where(sq.Eq{
+			"Channels.TeamId": teamID,
+			"ChannelMembers.UserId":    userID,
+		})
+	queryString, args, err := query.ToSql()
+
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "channel_tosql")
+	}
+
+
+	return nil, nil, nil, nil
+}
+
+
+
+
 func (s SqlChannelStore) GetChannelsWithUnreadsAndWithMentions(_ request.CTX, channelIDs []string, userID string, userNotifyProps model.StringMap) ([]string, []string, map[string]int64, error) {
 	query := s.getQueryBuilder().Select(
 		"Channels.Id",

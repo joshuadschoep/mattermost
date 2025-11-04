@@ -40,6 +40,7 @@ type Props = WrappedComponentProps & {
     currentChannelId: string;
     categories: ChannelCategory[];
     unreadChannelIds: string[];
+    unreadThreadIds: string[];
     isUnreadFilterEnabled: boolean;
     displayedChannels: Channel[];
     newCategoryIds: string[];
@@ -67,6 +68,7 @@ type Props = WrappedComponentProps & {
         stopDragging: () => void;
         clearChannelSelection: () => void;
         readMultipleChannels: (channelIds: string[]) => void;
+        markAllThreadsInTeamRead: (userId: string, teamId: string) => void;
         setMarkAllAsReadWithoutConfirm: (userId: string, value: boolean) => void;
     };
 };
@@ -114,7 +116,7 @@ export class SidebarList extends React.PureComponent<Props, State> {
         document.addEventListener('keydown', this.navigateChannelShortcut);
         document.addEventListener('keydown', this.navigateUnreadChannelShortcut);
         if (this.props.markAllAsReadShortcutEnabled) {
-            document.addEventListener('keydown', this.markAllChannelsAsReadShortcut);
+            document.addEventListener('keydown', this.markAllAsReadShortcut);
         }
     }
 
@@ -122,7 +124,7 @@ export class SidebarList extends React.PureComponent<Props, State> {
         document.removeEventListener('keydown', this.navigateChannelShortcut);
         document.removeEventListener('keydown', this.navigateUnreadChannelShortcut);
         if (this.props.markAllAsReadShortcutEnabled) {
-            document.removeEventListener('keydown', this.markAllChannelsAsReadShortcut);
+            document.removeEventListener('keydown', this.markAllAsReadShortcut);
         }
     }
 
@@ -352,11 +354,11 @@ export class SidebarList extends React.PureComponent<Props, State> {
         }
     };
 
-    markAllChannelsAsReadShortcut = (e: KeyboardEvent) => {
+    markAllAsReadShortcut = (e: KeyboardEvent) => {
         if (!e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && isKeyPressed(e, Constants.KeyCodes.ESCAPE)) {
             e.preventDefault();
             if (this.props.markAllAsReadWithoutConfirm) {
-                this.markAllMessagesAsRead();
+                this.markAllAsRead();
             } else {
                 this.setState({
                     showMarkAllReadModal: true,
@@ -447,14 +449,16 @@ export class SidebarList extends React.PureComponent<Props, State> {
         this.props.actions.stopDragging();
     };
 
-    markAllMessagesAsRead = () => {
+    markAllAsRead = () => {
         if (this.props.unreadChannelIds && this.props.unreadChannelIds.length > 0) {
+            // Note: This method does indeed update _threads and messages_ as well.
+            // See `readMultipleChannels` in `api4/channel.go`
             this.props.actions.readMultipleChannels(this.props.unreadChannelIds);
         }
     };
 
     onMarkAllAsReadConfirm = (dontShowAgain: boolean) => {
-        this.markAllMessagesAsRead();
+        this.markAllAsRead();
         this.props.actions.setMarkAllAsReadWithoutConfirm(
             this.props.currentUserId,
             dontShowAgain,

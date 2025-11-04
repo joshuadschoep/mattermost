@@ -389,6 +389,7 @@ const (
 	AuditEventLocalPermanentDeleteAllUsers = "localPermanentDeleteAllUsers" // permanently delete all users locally
 	AuditEventLogin                        = "login"                        // user login to system
 	AuditEventLogout                       = "logout"                       // user logout from system
+	AuditEventMarkAllRead                  = "markAllRead"					// user marked an entire team as read
 	AuditEventMigrateAuthToLdap            = "migrateAuthToLdap"            // migrate user authentication method to LDAP
 	AuditEventMigrateAuthToSaml            = "migrateAuthToSaml"            // migrate user authentication method to SAML
 	AuditEventPatchUser                    = "patchUser"                    // update user properties

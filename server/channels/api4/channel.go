@@ -1712,7 +1712,20 @@ func updateAllReadStateByTeamForUser(c *Context, w http.ResponseWriter, r *http.
 		return
 	}
 
-	
+	times, err := c.App.MarkAllChannelsAndThreadsViewed(c.AppContext, c.Params.TeamId, c.Params.UserId, c.AppContext.Session().Id, true, c.App.IsCRTEnabledForUser(c.AppContext, c.Params.UserId))
+		if err != nil {
+		c.Err = err
+		return
+	}
+
+	resp := &model.ChannelViewResponse{
+		Status:            "OK",
+		LastViewedAtTimes: times,
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		c.Logger.Warn("Error while writing response", mlog.Err(err))
+	}
 }
 
 func updateChannelMemberRoles(c *Context, w http.ResponseWriter, r *http.Request) {

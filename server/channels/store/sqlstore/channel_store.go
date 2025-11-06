@@ -2069,21 +2069,42 @@ func (s SqlChannelStore) GetChannelsByTeamWithUnreadAndMentions(rctx request.CTX
 		"ChannelMembers.LastViewedAt",
 	).From("ChannelMembers").
 		InnerJoin("Channels ON ChannelMembers.ChannelId = Channels.Id").Where(sq.Eq{
-			"Channels.TeamId": teamID,
-			"ChannelMembers.UserId":    userID,
-		})
+		"Channels.TeamId":       teamID,
+		"ChannelMembers.UserId": userID,
+	})
 	queryString, args, err := query.ToSql()
 
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "channel_tosql")
 	}
 
+	var channels []struct {
+		Id            string
+		Type          string
+		TotalMsgCount int
+		LastPostAt    int64
+		MsgCount      int
+		MentionCount  int
+		NotifyProps   model.StringMap
+		LastViewedAt  int64
+	}
+
+	err = s.GetReplica().Select(&channels, queryString, args...)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "failed to find channels with unreads and with mentions data")
+	}
+
+	// channelsWithUnreads := []string{}
+	// channelsWithMentions := []string{}
+	// channelsWithUnreadThreads := []string{}
+
+	for _ = range channels {
+		// channel := channels[i]
+		// TODO
+	}
 
 	return nil, nil, nil, nil
 }
-
-
-
 
 func (s SqlChannelStore) GetChannelsWithUnreadsAndWithMentions(_ request.CTX, channelIDs []string, userID string, userNotifyProps model.StringMap) ([]string, []string, map[string]int64, error) {
 	query := s.getQueryBuilder().Select(

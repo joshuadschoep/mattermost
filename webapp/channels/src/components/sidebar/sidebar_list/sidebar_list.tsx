@@ -66,7 +66,8 @@ type Props = WrappedComponentProps & {
         setDraggingState: (data: DraggingState) => void;
         stopDragging: () => void;
         clearChannelSelection: () => void;
-        readMultipleChannels: (channelIds: string[]) => void;
+        readAllMessages: (userId: string) => void;
+        markAllInTeamAsRead: (userId: string, teamId: string) => void;
         setMarkAllAsReadWithoutConfirm: (userId: string, value: boolean) => void;
     };
 };
@@ -448,8 +449,11 @@ export class SidebarList extends React.PureComponent<Props, State> {
     };
 
     markAllMessagesAsRead = () => {
-        if (this.props.unreadChannelIds && this.props.unreadChannelIds.length > 0) {
-            this.props.actions.readMultipleChannels(this.props.unreadChannelIds);
+        if (this.props.currentTeam?.id) {
+            this.props.actions.markAllInTeamAsRead(this.props.currentUserId, this.props.currentTeam.id);
+        }
+        if (this.props.unreadChannelIds.length > 0) {
+            this.props.actions.readAllMessages(this.props.currentUserId);
         }
     };
 

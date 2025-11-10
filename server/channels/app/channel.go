@@ -3154,27 +3154,28 @@ func (a *App) SearchChannelsUserNotIn(rctx request.CTX, teamID string, userID st
 	return channelList, nil
 }
 
-func (a *App) MarkAllChannelsAndThreadsViewed(rctx request.CTX, teamID string, userID string, currentSessionID string, collapsedThreadsSupported, isCRTEnabled bool) (map[string]int64, *model.AppError) {
+func (a *App) MarkTeamChannelsAndThreadsViewed(rctx request.CTX, teamID string, userID string, currentSessionID string, isCRTEnabled bool) (map[string]int64, *model.AppError) {
 	user, err := a.Srv().Store().User().Get(rctx.Context(), userID)
+	mlog.Warn("Marking all read for team", mlog.String("user", user.Id), mlog.String("team", teamID))
 	if err != nil {
-		return nil, model.NewAppError("MarkAllChannelsAndThreadsViewed", "app.user.get.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
+		return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.user.get.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
 	}
 
 	// Note: While we have logic for Channels to selectively update read-date for only outdated channels,
 	// this was not done for threads. It seems like this was because channels need to report/clear
-	// push notifications, but threads do not. This is, however, a bit of an assumption on my part.
+	// push notifications, but threads do not. As a result, this method call acts on _all threads_, not just out of date ones.
+	// This is, however, a bit of an assumption on my part.
 	// See `MarkChannelsAsViewed` vs. `thread_store.go:MarkAllAsReadByTeam` for what I mean.
-	updateThreads := *a.Config().ServiceSettings.ThreadAutoFollow && (!collapsedThreadsSupported || !isCRTEnabled)
-	if updateThreads {
-		err := a.Srv().Store().Thread().MarkAllAsReadByTeam(userID, teamID)
-		if err != nil {
-			return nil, model.NewAppError("MarkAllChannelsAndThreadsViewed", "app.thread.mark_all_channels_and_threads.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
-		}
-	}
-
-	channelsToView, channelsToClearPushNotifications, times, err := a.Srv().Store().Channel().GetChannelsByTeamWithUnreadAndMentions(rctx, teamID, userID, user.NotifyProps)
+	err = a.Srv().Store().Thread().MarkAllAsReadByTeam(userID, teamID)
 	if err != nil {
-		return nil, model.NewAppError("MarkAllChannelsAndThreadsViewed", "app.channel.get_channels_by_team_with_unreads_and_with_mentions.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
+		return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.thread.mark_all_channels_and_threads.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
+	}
+	
+
+	channelsToView, channelsToClearPushNotifications, times, err := a.Srv().Store().Channel().GetTeamChannelsWithUnreadAndMentions(rctx, teamID, userID, user.NotifyProps)
+	mlog.Warn("Got channels back", mlog.String("user", user.Id), mlog.String("team", teamID), mlog.Array("channels", channelsToView))
+	if err != nil {
+		return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.channel.get_channels_by_team_with_unreads_and_with_mentions.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
 	}
 
 	if len(channelsToView) == 0 {
@@ -3186,9 +3187,9 @@ func (a *App) MarkAllChannelsAndThreadsViewed(rctx request.CTX, teamID string, u
 		var invErr *store.ErrInvalidInput
 		switch {
 		case errors.As(err, &invErr):
-			return nil, model.NewAppError("MarkAllChannelsAndThreadsViewed", "app.channel.update_last_viewed_at.app_error", nil, "", http.StatusBadRequest).Wrap(err)
+			return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.channel.update_last_viewed_at.app_error", nil, "", http.StatusBadRequest).Wrap(err)
 		default:
-			return nil, model.NewAppError("MarkAllChannelsAndThreadsViewed", "app.channel.update_last_viewed_at.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
+			return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.channel.update_last_viewed_at.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
 		}
 	}
 
@@ -3202,9 +3203,59 @@ func (a *App) MarkAllChannelsAndThreadsViewed(rctx request.CTX, teamID string, u
 		a.clearPushNotification(currentSessionID, userID, channelID, "")
 	}
 
-	if updateThreads && isCRTEnabled {
+	if isCRTEnabled {
 		timestamp := model.GetMillis()
 		for _, channelID := range channelsToView {
+			message := model.NewWebSocketEvent(model.WebsocketEventThreadReadChanged, "", channelID, userID, nil, "")
+			message.Add("timestamp", timestamp)
+			a.Publish(message)
+		}
+	}
+
+	return times, nil
+}
+
+func (a *App) MarkAllDirectAndGroupMessagesViewed(rctx request.CTX, userID string, currentSessionID string, isCRTEnabled bool)(map[string]int64, *model.AppError) {
+	user, err := a.Srv().Store().User().Get(rctx.Context(), userID)
+	mlog.Warn("Marking all DMs read", mlog.String("user", user.Id))
+	if err != nil {
+		return nil, model.NewAppError("MarkAllDirectAndGroupMessagesViewed", "app.user.get.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
+	}
+
+	messagesToView, messagesToClearPushNotifications, times, err := a.Srv().Store().Channel().GetMessagesWithUnreadAndMentions(rctx, userID, user.NotifyProps)
+	mlog.Warn("Got channels back", mlog.String("user", user.Id), mlog.Array("channels", messagesToView))
+	if err != nil {
+		return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.channel.get_channels_by_team_with_unreads_and_with_mentions.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
+	}
+
+	if len(messagesToView) == 0 {
+		return times, nil
+	}
+
+	_, err = a.Srv().Store().Channel().UpdateLastViewedAt(messagesToView, userID)
+	if err != nil {
+		var invErr *store.ErrInvalidInput
+		switch {
+		case errors.As(err, &invErr):
+			return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.channel.update_last_viewed_at.app_error", nil, "", http.StatusBadRequest).Wrap(err)
+		default:
+			return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.channel.update_last_viewed_at.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
+		}
+	}
+
+	if *a.Config().ServiceSettings.EnableChannelViewedMessages {
+		message := model.NewWebSocketEvent(model.WebsocketEventMultipleChannelsViewed, "", "", userID, nil, "")
+		message.Add("channel_times", times)
+		a.Publish(message)
+	}
+
+	for _, channelID := range messagesToClearPushNotifications {
+		a.clearPushNotification(currentSessionID, userID, channelID, "")
+	}
+
+	if isCRTEnabled {
+		timestamp := model.GetMillis()
+		for _, channelID := range messagesToView {
 			message := model.NewWebSocketEvent(model.WebsocketEventThreadReadChanged, "", channelID, userID, nil, "")
 			message.Add("timestamp", timestamp)
 			a.Publish(message)

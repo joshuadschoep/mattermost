@@ -26,6 +26,7 @@ func (api *API) InitChannel() {
 	api.BaseRoutes.Channels.Handle("/group", api.APISessionRequired(createGroupChannel)).Methods(http.MethodPost)
 	api.BaseRoutes.Channels.Handle("/members/{user_id:[A-Za-z0-9]+}/view", api.APISessionRequired(viewChannel)).Methods(http.MethodPost)
 	api.BaseRoutes.Channels.Handle("/members/{user_id:[A-Za-z0-9]+}/mark_read", api.APISessionRequired(readMultipleChannels)).Methods(http.MethodPost)
+	api.BaseRoutes.Channels.Handle("/members/{user_id:[A-Za-z0-9]+}/direct/read", api.APISessionRequired(readAllMessages)).Methods(http.MethodPut)
 	api.BaseRoutes.Channels.Handle("/{channel_id:[A-Za-z0-9]+}/scheme", api.APISessionRequired(updateChannelScheme)).Methods(http.MethodPut)
 	api.BaseRoutes.Channels.Handle("/stats/member_count", api.APISessionRequired(getChannelsMemberCount)).Methods(http.MethodPost)
 
@@ -36,7 +37,7 @@ func (api *API) InitChannel() {
 	api.BaseRoutes.ChannelsForTeam.Handle("/search", api.APISessionRequiredDisableWhenBusy(searchChannelsForTeam)).Methods(http.MethodPost)
 	api.BaseRoutes.ChannelsForTeam.Handle("/autocomplete", api.APISessionRequired(autocompleteChannelsForTeam)).Methods(http.MethodGet)
 	api.BaseRoutes.ChannelsForTeam.Handle("/search_autocomplete", api.APISessionRequired(autocompleteChannelsForTeamForSearch)).Methods(http.MethodGet)
-	api.BaseRoutes.ChannelsForTeam.Handle("/read", api.APISessionRequired(updateAllReadStateByTeamForUser)).Methods(http.MethodPut)
+	api.BaseRoutes.User.Handle("/teams/{team_id:[A-Za-z0-9]+}/read", api.APISessionRequired(readAllInTeam)).Methods(http.MethodPut)
 	api.BaseRoutes.User.Handle("/teams/{team_id:[A-Za-z0-9]+}/channels", api.APISessionRequired(getChannelsForTeamForUser)).Methods(http.MethodGet)
 	api.BaseRoutes.User.Handle("/channels", api.APISessionRequired(getChannelsForUser)).Methods(http.MethodGet)
 
@@ -526,6 +527,42 @@ func createDirectChannel(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(sc); err != nil {
+		c.Logger.Warn("Error while writing response", mlog.Err(err))
+	}
+}
+
+func readAllMessages(c *Context, w http.ResponseWriter, r *http.Request) {
+	if !c.App.Config().FeatureFlags.EnableShiftEscapeToMarkAllRead {
+		c.Err = model.NewAppError("readAllMessages", "api.feature_disabled", nil, "", http.StatusNotImplemented)
+		return
+	}
+
+	c.RequireUserId()
+	if c.Err != nil {
+		return
+	}
+
+	auditRec := c.MakeAuditRecord(model.AuditEventMarkMessagesRead, model.AuditStatusFail)
+	defer c.LogAuditRec(auditRec)
+	model.AddEventParameterToAuditRec(auditRec, "user_id", c.Params.UserId)
+
+	if !c.App.SessionHasPermissionToUser(*c.AppContext.Session(), c.Params.UserId) {
+		c.SetPermissionError(model.PermissionEditOtherUsers)
+		return
+	}
+
+		times, err := c.App.MarkAllDirectAndGroupMessagesViewed(c.AppContext, c.Params.UserId, c.AppContext.Session().Id, c.App.IsCRTEnabledForUser(c.AppContext, c.Params.UserId))
+		if err != nil {
+		c.Err = err
+		return
+	}
+
+	resp := &model.ChannelViewResponse{
+		Status:            "OK",
+		LastViewedAtTimes: times,
+	}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		c.Logger.Warn("Error while writing response", mlog.Err(err))
 	}
 }
@@ -1687,9 +1724,10 @@ func readMultipleChannels(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func updateAllReadStateByTeamForUser(c *Context, w http.ResponseWriter, r *http.Request) {
+func readAllInTeam(c *Context, w http.ResponseWriter, r *http.Request) {
+	mlog.Warn("Update read state called, is feature flag enabled?: ", mlog.Bool("Enabled", c.App.Config().FeatureFlags.EnableShiftEscapeToMarkAllRead))
 	if !c.App.Config().FeatureFlags.EnableShiftEscapeToMarkAllRead {
-		c.Err = model.NewAppError("updateAllReadStateByTeamForUser", "api.feature_disabled", nil, "", http.StatusNotImplemented)
+		c.Err = model.NewAppError("readAllInTeam", "api.feature_disabled", nil, "", http.StatusNotImplemented)
 		return
 	}
 
@@ -1698,7 +1736,7 @@ func updateAllReadStateByTeamForUser(c *Context, w http.ResponseWriter, r *http.
 		return
 	}
 
-	auditRec := c.MakeAuditRecord(model.AuditEventMarkAllRead, model.AuditStatusFail)
+	auditRec := c.MakeAuditRecord(model.AuditEventMarkTeamRead, model.AuditStatusFail)
 	defer c.LogAuditRec(auditRec)
 	model.AddEventParameterToAuditRec(auditRec, "user_id", c.Params.UserId)
 	model.AddEventParameterToAuditRec(auditRec, "team_id", c.Params.TeamId)
@@ -1712,7 +1750,7 @@ func updateAllReadStateByTeamForUser(c *Context, w http.ResponseWriter, r *http.
 		return
 	}
 
-	times, err := c.App.MarkAllChannelsAndThreadsViewed(c.AppContext, c.Params.TeamId, c.Params.UserId, c.AppContext.Session().Id, true, c.App.IsCRTEnabledForUser(c.AppContext, c.Params.UserId))
+	times, err := c.App.MarkTeamChannelsAndThreadsViewed(c.AppContext, c.Params.TeamId, c.Params.UserId, c.AppContext.Session().Id, c.App.IsCRTEnabledForUser(c.AppContext, c.Params.UserId))
 		if err != nil {
 		c.Err = err
 		return

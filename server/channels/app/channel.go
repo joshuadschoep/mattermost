@@ -3156,7 +3156,6 @@ func (a *App) SearchChannelsUserNotIn(rctx request.CTX, teamID string, userID st
 
 func (a *App) MarkTeamChannelsAndThreadsViewed(rctx request.CTX, teamID string, userID string, currentSessionID string, isCRTEnabled bool) (map[string]int64, *model.AppError) {
 	user, err := a.Srv().Store().User().Get(rctx.Context(), userID)
-	mlog.Warn("Marking all read for team", mlog.String("user", user.Id), mlog.String("team", teamID))
 	if err != nil {
 		return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.user.get.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
 	}
@@ -3173,7 +3172,6 @@ func (a *App) MarkTeamChannelsAndThreadsViewed(rctx request.CTX, teamID string, 
 	
 
 	channelsToView, channelsToClearPushNotifications, times, err := a.Srv().Store().Channel().GetTeamChannelsWithUnreadAndMentions(rctx, teamID, userID, user.NotifyProps)
-	mlog.Warn("Got channels back", mlog.String("user", user.Id), mlog.String("team", teamID), mlog.Array("channels", channelsToView))
 	if err != nil {
 		return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.channel.get_channels_by_team_with_unreads_and_with_mentions.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
 	}
@@ -3217,13 +3215,11 @@ func (a *App) MarkTeamChannelsAndThreadsViewed(rctx request.CTX, teamID string, 
 
 func (a *App) MarkAllDirectAndGroupMessagesViewed(rctx request.CTX, userID string, currentSessionID string, isCRTEnabled bool)(map[string]int64, *model.AppError) {
 	user, err := a.Srv().Store().User().Get(rctx.Context(), userID)
-	mlog.Warn("Marking all DMs read", mlog.String("user", user.Id))
 	if err != nil {
 		return nil, model.NewAppError("MarkAllDirectAndGroupMessagesViewed", "app.user.get.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
 	}
 
 	messagesToView, messagesToClearPushNotifications, times, err := a.Srv().Store().Channel().GetMessagesWithUnreadAndMentions(rctx, userID, user.NotifyProps)
-	mlog.Warn("Got channels back", mlog.String("user", user.Id), mlog.Array("channels", messagesToView))
 	if err != nil {
 		return nil, model.NewAppError("MarkTeamChannelsAndThreadsViewed", "app.channel.get_channels_by_team_with_unreads_and_with_mentions.app_error", nil, "", http.StatusInternalServerError).Wrap(err)
 	}

@@ -1725,7 +1725,6 @@ func readMultipleChannels(c *Context, w http.ResponseWriter, r *http.Request) {
 }
 
 func readAllInTeam(c *Context, w http.ResponseWriter, r *http.Request) {
-	mlog.Warn("Update read state called, is feature flag enabled?: ", mlog.Bool("Enabled", c.App.Config().FeatureFlags.EnableShiftEscapeToMarkAllRead))
 	if !c.App.Config().FeatureFlags.EnableShiftEscapeToMarkAllRead {
 		c.Err = model.NewAppError("readAllInTeam", "api.feature_disabled", nil, "", http.StatusNotImplemented)
 		return

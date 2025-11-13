@@ -8,9 +8,8 @@ import type {Dispatch} from 'redux';
 import type {PreferenceType} from '@mattermost/types/preferences';
 
 import {moveCategory} from 'mattermost-redux/actions/channel_categories';
-import {readAllMessages} from 'mattermost-redux/actions/channels';
+import {readMultipleChannels} from 'mattermost-redux/actions/channels';
 import {savePreferences} from 'mattermost-redux/actions/preferences';
-import {markAllInTeamAsRead} from 'mattermost-redux/actions/teams';
 import {Preferences} from 'mattermost-redux/constants';
 import {getCurrentChannelId, getUnreadChannelIds} from 'mattermost-redux/selectors/entities/channels';
 import {getFeatureFlagValue} from 'mattermost-redux/selectors/entities/general';
@@ -92,8 +91,7 @@ function mapDispatchToProps(dispatch: Dispatch) {
             stopDragging,
             clearChannelSelection,
             switchToLhsStaticPage,
-            readAllMessages,
-            markAllInTeamAsRead,
+            readMultipleChannels,
             setMarkAllAsReadWithoutConfirm,
         }, dispatch),
     };
